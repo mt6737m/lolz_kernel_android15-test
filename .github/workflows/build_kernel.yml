@@ -1,0 +1,69 @@
+name: Build Android Kernel
+
+on:
+  workflow_dispatch: # Запуск вручную кнопкой
+
+# НАСТРОЙКА ПРАВ: Разрешаем встроенному токену создавать релизы и загружать файлы
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Kernel Source
+      uses: actions/checkout@v4
+      with:
+        submodules: 'recursive'
+        fetch-depth: 1
+
+    - name: Install Build Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzma lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev
+
+    - name: Download Clang Toolchain
+      run: |
+        mkdir clang
+        cd clang
+        curl -LO https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r522817.tar.gz
+        tar -xf clang-r522817.tar.gz
+        rm clang-r522817.tar.gz
+        echo "$(pwd)/bin" >> $GITHUB_PATH
+
+    - name: Build Kernel
+      run: |
+        export ARCH=arm64
+        export SUBARCH=arm64
+        export CC=clang
+        export CLANG_TRIPLE=aarch64-linux-gnu-
+        export CROSS_COMPILE=aarch64-linux-android-
+        
+        # Замените на ваш реальный defconfig (например, для кодового имени вашего устройства)
+        make O=out defconfig
+        make O=out -j$(nproc)
+
+    # ШАГ 1: Генерируем уникальный тег на основе даты и времени сборки
+    - name: Generate Release Tag
+      id: tag
+      run: |
+        echo "release_tag=kernel_$(date +'%Y%m%d_%H%M')" >> $GITHUB_OUTPUT
+
+    # ШАГ 2: Публикация в GitHub Releases
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ steps.tag.outputs.release_tag }}
+        name: "Android Kernel Build [${{ steps.tag.outputs.release_tag }}]"
+        body: |
+          ### Статус сборки: Успешно!
+          - **Архитектура:** arm64
+          - **Компилятор:** Google Clang
+          - **Дата сборки:** $(date +'%Y-%m-%d %H:%M')
+        draft: false
+        prerelease: false
+        files: |
+          out/arch/arm64/boot/Image*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Используем автоматически созданный токен
