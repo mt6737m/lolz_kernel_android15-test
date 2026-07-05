@@ -1,7 +1,7 @@
 name: Build Android Kernel
 
 on:
-  workflow_dispatch: # Запуск вручную кнопкой
+  workflow_dispatch: # Запуск вручную кнопкой во вкладке Actions
 
 permissions:
   contents: write
@@ -21,30 +21,29 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzma lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev
-        
-        
+
     - name: Download Clang Toolchain
       run: |
-        # Убираем жесткую привязку к ветке '18', Git сам выберет актуальную дефолтную ветку
         git clone https://github.com/ZyCromerZ/Clang.git --depth=1 clang
         echo "$GITHUB_WORKSPACE/clang/bin" >> $GITHUB_PATH
 
-    # === НОВЫЙ ШАГ (Добавлен тут) ===
     - name: Setup KernelSU
       run: |
         cd $GITHUB_WORKSPACE
         curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
 
-    # === ОБНОВЛЕННЫЙ ШАГ СБОРКИ ===
     - name: Build Kernel
       run: |
+        # Гарантируем, что линкер и компилятор будут видны во всех подпроцессах /bin/sh
+        export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
         export ARCH=arm64
         export SUBARCH=arm64
         
-        # Переменная со всеми флагами, включая LLVM=1 для сборки без GCC
-        MAKE_ARGS="O=out ARCH=arm64 CC=clang LLVM=1 LLVM_IAS=1 CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android-"
+        # Полный развернутый набор аргументов LLVM для старых Makefile
+        MAKE_ARGS="O=out ARCH=arm64 CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip LLVM=1 LLVM_IAS=1 CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android-"
         
-        # !!! ЗАМЕНИ 'имя_вашего_defconfig' НА СВОЙ (например, vendor/bluejay_defconfig) !!!
+        # !!! НЕ ЗАБУДЬ ПОМЕНЯТЬ 'имя_вашего_defconfig' НА СВОЙ !!!
+        # Например: vendor/bluejay_defconfig или vendor/olive_defconfig
         make $MAKE_ARGS defconfig
         make $MAKE_ARGS -j$(nproc)
 
@@ -61,7 +60,7 @@ jobs:
         body: |
           ### Статус сборки: Успешно!
           - **Архитектура:** arm64
-          - **Компилятор:** Google Clang + LLVM
+          - **Компилятор:** ZyCromerZ Clang + Full LLVM Toolchain
           - **Особенности:** Встроенный KernelSU
         draft: false
         prerelease: false
