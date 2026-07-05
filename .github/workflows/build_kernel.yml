@@ -24,13 +24,10 @@ jobs:
 
     - name: Download Clang Toolchain
       run: |
-        mkdir clang
-        cd clang
-        curl -LO https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r522817.tar.gz
-        tar -xf clang-r522817.tar.gz
-        rm clang-r522817.tar.gz
-        echo "$(pwd)/bin" >> $GITHUB_PATH
-
+        # Клонируем ветку Clang 18 с глубиной 1, чтобы не тянуть историю коммитов
+        git clone https://github.com/ZyCromerZ/Clang.git -b 18 --depth=1 clang
+        # Добавляем бинарники компилятора в PATH виртуальной машины
+        echo "$GITHUB_WORKSPACE/clang/bin" >> $GITHUB_PATH
     # === НОВЫЙ ШАГ (Добавлен тут) ===
     - name: Setup KernelSU
       run: |
