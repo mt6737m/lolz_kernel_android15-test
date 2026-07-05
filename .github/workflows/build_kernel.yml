@@ -1,7 +1,7 @@
 name: Build Android Kernel
 
 on:
-  workflow_dispatch: # Запуск вручную кнопкой во вкладке Actions
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -20,11 +20,13 @@ jobs:
     - name: Install Build Dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzma lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev
+        # Добавили clang и lld прямо в систему для глобальной подстраховки
+        sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzma lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev clang lld
 
     - name: Download Clang Toolchain
       run: |
-        git clone https://github.com/ZyCromerZ/Clang.git --depth=1 clang
+        # Клонируем легендарный Proton-Clang, где все бинарники сразу на месте
+        git clone https://github.com/kdrag0n/proton-clang.git --depth=1 clang
         echo "$GITHUB_WORKSPACE/clang/bin" >> $GITHUB_PATH
 
     - name: Setup KernelSU
@@ -34,16 +36,16 @@ jobs:
 
     - name: Build Kernel
       run: |
-        # Гарантируем, что линкер и компилятор будут видны во всех подпроцессах /bin/sh
-        export PATH="$GITHUB_WORKSPACE/clang/bin:$PATH"
         export ARCH=arm64
         export SUBARCH=arm64
         
-        # Полный развернутый набор аргументов LLVM для старых Makefile
-        MAKE_ARGS="O=out ARCH=arm64 CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip LLVM=1 LLVM_IAS=1 CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android-"
+        # Переменная с абсолютным путем к нашему скачанному тулчейну
+        CLANG_DIR="$GITHUB_WORKSPACE/clang/bin"
+        
+        # Передаем АБСОЛЮТНЫЕ пути к каждой утилите. Теперь скрипты vDSO не смогут их потерять!
+        MAKE_ARGS="O=out ARCH=arm64 CC=$CLANG_DIR/clang LD=$CLANG_DIR/ld.lld AR=$CLANG_DIR/llvm-ar NM=$CLANG_DIR/llvm-nm OBJCOPY=$CLANG_DIR/llvm-objcopy OBJDUMP=$CLANG_DIR/llvm-objdump STRIP=$CLANG_DIR/llvm-strip LLVM=1 LLVM_IAS=1 CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android-"
         
         # !!! НЕ ЗАБУДЬ ПОМЕНЯТЬ 'имя_вашего_defconfig' НА СВОЙ !!!
-        # Например: vendor/bluejay_defconfig или vendor/olive_defconfig
         make $MAKE_ARGS defconfig
         make $MAKE_ARGS -j$(nproc)
 
@@ -60,7 +62,7 @@ jobs:
         body: |
           ### Статус сборки: Успешно!
           - **Архитектура:** arm64
-          - **Компилятор:** ZyCromerZ Clang + Full LLVM Toolchain
+          - **Компилятор:** Proton-Clang (Absolute Paths)
           - **Особенности:** Встроенный KernelSU
         draft: false
         prerelease: false
