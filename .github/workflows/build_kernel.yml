@@ -26,11 +26,7 @@ jobs:
         tar -xf master.tar.gz --strip-components=1
         cd ..
 
-    - name: Integrate KernelSU
-      run: |
-         cd lolz_kernel_android15-test
-         rm -rf drivers/kernelsu
-         git clone https://github.com/tiann/KernelSU.git drivers/kernelsu
+   
 
     - name: Build Kernel
       run: |
