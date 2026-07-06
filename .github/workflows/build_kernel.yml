@@ -26,6 +26,12 @@ jobs:
         tar -xf master.tar.gz --strip-components=1
         cd ..
 
+     - name: Integrate KernelSU
+  run: |
+    cd $GITHUB_WORKSPACE
+    # Replace 'drivers/kernelsu' with the correct path relative to your kernel root if needed
+    git clone https://github.com/tiann/KernelSU.git drivers/kernelsu
+
     - name: Build Kernel
       run: |
         export PATH="$(pwd)/clang/bin:$PATH"
