@@ -1,72 +1,74 @@
-name: Build Android Kernel
+name: Build Kernel
 
 on:
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   build:
-    runs-on: ubuntu-latest
-
+    runs-on: ubuntu-22.04
     steps:
     - name: Checkout Kernel Source
       uses: actions/checkout@v4
       with:
         submodules: 'recursive'
-        fetch-depth: 1
+        fetch-depth: 0
 
-    - name: Install Build Dependencies
+    - name: Set up Build Environment
       run: |
         sudo apt-get update
-        # Добавили clang и lld прямо в систему для глобальной подстраховки
-        sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzma lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev clang lld
+        sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev lz4 libncurses5-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3 libelf-dev
 
     - name: Download Clang Toolchain
       run: |
-        # Клонируем легендарный Proton-Clang, где все бинарники сразу на месте
-        git clone https://github.com/kdrag0n/proton-clang.git --depth=1 clang
-        echo "$GITHUB_WORKSPACE/clang/bin" >> $GITHUB_PATH
-
-    - name: Setup KernelSU
-      run: |
-        cd $GITHUB_WORKSPACE
-        curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
+        mkdir -p clang
+        cd clang
+        curl -LO https://github.com/kdrag0n/proton-clang/archive/refs/heads/master.tar.gz
+        tar -xf master.tar.gz --strip-components=1
+        cd ..
 
     - name: Build Kernel
       run: |
+        export PATH="$(pwd)/clang/bin:$PATH"
         export ARCH=arm64
         export SUBARCH=arm64
+        export CROSS_COMPILE=aarch64-linux-gnu-
+        export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
         
-        # Переменная с абсолютным путем к нашему скачанному тулчейну
-        CLANG_DIR="$GITHUB_WORKSPACE/clang/bin"
+        echo "============================================="
+        echo "          STARTING YOUR KERNEL BUILD         "
+        echo "============================================="
+        make O=out vendor/defconfig CC=clang HOSTCC=clang
         
-        # Передаем АБСОЛЮТНЫЕ пути к каждой утилите. Теперь скрипты vDSO не смогут их потерять!
-        MAKE_ARGS="O=out ARCH=arm64 CC=$CLANG_DIR/clang LD=$CLANG_DIR/ld.lld AR=$CLANG_DIR/llvm-ar NM=$CLANG_DIR/llvm-nm OBJCOPY=$CLANG_DIR/llvm-objcopy OBJDUMP=$CLANG_DIR/llvm-objdump STRIP=$CLANG_DIR/llvm-strip LLVM=1 LLVM_IAS=1 CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android-"
+        make -j$(nproc --all) O=out \
+                      CC=clang \
+                      HOSTCC=clang \
+                      LD=ld.lld \
+                      AR=llvm-ar \
+                      NM=llvm-nm \
+                      OBJCOPY=llvm-objcopy \
+                      OBJDUMP=llvm-objdump \
+                      STRIP=llvm-strip \
+                      KCFLAGS="-O2 -pipe"
         
-        # !!! НЕ ЗАБУДЬ ПОМЕНЯТЬ 'имя_вашего_defconfig' НА СВОЙ !!!
-        make $MAKE_ARGS defconfig
-        make $MAKE_ARGS -j$(nproc)
-
-    - name: Generate Release Tag
-      id: tag
+    - name: Checking Kernel Output
       run: |
-        echo "release_tag=kernel_$(date +'%Y%m%d_%H%M')" >> $GITHUB_OUTPUT
+        echo "============================================="
+        echo "          CHECKING KERNEL OUTPUT             "
+        echo "============================================="
+        if [ -f out/arch/arm64/boot/Image ]; then
+          echo "SUCCESS: Image found!"
+          echo "KERNEL_PATH=out/arch/arm64/boot/Image" >> $GITHUB_ENV
+        else
+          echo "ERROR: No kernel Image found! Build genuinely failed."
+          exit 1
+        fi
 
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v2
+    - name: Prepare Artifact
+      run: |
+        cp ${{ env.KERNEL_PATH }} ./Image
+
+    - name: Upload Kernel Artifact
+      uses: actions/upload-artifact@v4
       with:
-        tag_name: ${{ steps.tag.outputs.release_tag }}
-        name: "Android Kernel Build [${{ steps.tag.outputs.release_tag }}]"
-        body: |
-          ### Статус сборки: Успешно!
-          - **Архитектура:** arm64
-          - **Компилятор:** Proton-Clang (Absolute Paths)
-          - **Особенности:** Встроенный KernelSU
-        draft: false
-        prerelease: false
-        files: |
-          out/arch/arm64/boot/Image*
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        name: Image
+        path: Image
