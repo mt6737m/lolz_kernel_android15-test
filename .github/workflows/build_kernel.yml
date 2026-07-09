@@ -49,8 +49,8 @@ jobs:
         echo "============================================="
         echo "          STARTING YOUR KERNEL BUILD         "
         echo "============================================="
-        make O=out vendor/msm8937_defconfig CC=clang HOSTCC=clang
-        
+        make O=out vendor/msm8937_defconfig CC=clang
+        make O=out olddefconfig CC=clang
         make -j$(nproc --all) O=out \
                       CC=clang \
                       HOSTCC=clang \
