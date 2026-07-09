@@ -43,14 +43,10 @@ jobs:
         export SUBARCH=arm64
         export CROSS_COMPILE=aarch64-linux-gnu-
         export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
-      
-        
         echo "============================================="
         echo "          STARTING YOUR KERNEL BUILD         "
         echo "============================================="
         make O=out vendor/msm8937_defconfig CC=clang
-        echo 'CONFIG_LITTLE_CPU_MASK=0x0f' >> out/.config
-        echo 'CONFIG_BIG_CPU_MASK=0xf0' >> out/.config
         make O=out olddefconfig CC=clang
         make -j$(nproc --all) O=out \
                       CC=clang \
